@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Message;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class ChatController extends Controller
 {
@@ -37,10 +38,45 @@ class ChatController extends Controller
         $message->message = $request->input('message');
         $message->save();
 
-        sleep(rand(1, 10));
+        $llm = new \App\Services\LocalLLMAdapter();
+
+        $history = Message::whereSessionId($session_id)->get();
+        $history = $history->map(function ($item) {
+            return [
+                'role' => $item->type,
+                'content' => $item->message,
+            ];
+        })->toArray();
+
+        Log::info('History:');
+        Log::info($history);
+
+        Log::info('Message:');
+        Log::info($message->message);
+        Log::info('Session ID:');
+        Log::info($session_id);
+
+
+
+        $response = $llm->chat($message->message, $history);
+        Log::info('Response');
+        Log::info($response);
+        if ($response['status'] === 'error') {
+            return response()->json([
+                'status' => 'error',
+                'message' => $response['message'],
+            ], 500);
+        }
+        //add message to db
+        $message = new Message();
+        $message->session_id = $session_id;
+        $message->type = 'assistant';
+        $message->message = $response['data']['output'];
+        $message->save();
 
         return response()->json([
-            'message' => 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.',
+            'status' => 'success',
+            'message' => $response['data']['output']
         ]);
     }
 }
