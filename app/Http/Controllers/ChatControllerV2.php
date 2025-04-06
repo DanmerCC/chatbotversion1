@@ -3,23 +3,35 @@
 namespace App\Http\Controllers;
 
 use App\Models\Message;
+use App\Models\Session;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
-use App\Actions\GetLLMResponse;
 use App\Actions\SaveMessage;
+use App\Actions\GetLLMResponse;
 
-class ChatController extends Controller
+class ChatControllerV2 extends Controller
 {
     public function index(Request $request)
     {
 
-        $page = $request->input('page', 1);
-        $limit = $request->input('limit', 10);
-        $offset = ($page - 1) * $limit;
+        $coockie = $request->cookie('session_v2_id');
+        if (!$coockie) {
+            throw new \Exception('Session ID not found');
+        }
 
-        $messages= Message::whereSessionId($request->session_id)->paginate($limit, ['*'], 'page', $page);
+        $session = Session::find($coockie);
+        if (!$session) {
+            throw new \Exception('Session ID not found');
+        }
 
+        $messages = Message::whereSessionId($session->id)->orderBy('created_at', 'desc')->paginate(10, ['*'], 'page', $request->input('page', 1));
         return response()->json($messages);
+    }
+
+    public function getSessionId(Request $request)
+    {
+        $session = Session::create();
+        $session->save();
+        return response()->json(['session_id' => $session->id]);
     }
 
     public function store(Request $request)
@@ -51,9 +63,11 @@ class ChatController extends Controller
         SaveMessage::run($session_id, 'assistant', $response['data']['output']);
 
         return response()->json([
-            'coockies' => $request->cookies,
             'status' => 'success',
-            'message' => $response['data']['output']
+            'data' => [
+                'output' => $response['data']['output'],
+            ],
         ]);
     }
+
 }
