@@ -75,6 +75,7 @@ class ChatController extends Controller
         $message->save();
 
         return response()->json([
+            'coockies' => $request->cookies,
             'status' => 'success',
             'message' => $response['data']['output']
         ]);
